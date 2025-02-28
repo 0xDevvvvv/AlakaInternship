@@ -84,7 +84,9 @@ func create5MinuteWindow(filteredData map[string][]interface{}) map[time.Time]*C
 
 	for i := 0; i < len(filteredData["date"]); i++ {
 		timestamp := time.Unix(0, filteredData["date"][i].(int64)).UTC()
+		// fmt.Println("Timestamp ", timestamp)
 		roundedTime := timestamp.Truncate(5 * time.Minute) //round off to the nearest 5 minute mark
+		// fmt.Println("Rounded Time ", roundedTime)
 		if _, exists := candles[roundedTime]; !exists {
 			candles[roundedTime] = &Candle{
 				OpeningTime: filteredData["date"][i].(int64),
@@ -97,22 +99,33 @@ func create5MinuteWindow(filteredData map[string][]interface{}) map[time.Time]*C
 		} else {
 			// Update High, Low, Close
 			c := candles[roundedTime]
+			cTime := time.Unix(0, c.ClosingTime).UTC()
+			oTime := time.Unix(0, c.OpeningTime).UTC()
+
 			c.High = max(c.High, filteredData["high"][i].(float64))
 			c.Low = min(c.Low, filteredData["low"][i].(float64))
-			if c.ClosingTime < filteredData["date"][i].(int64) {
+			if cTime.Sub(timestamp) < 0 {
+				// timestamp = time.Unix(0, filteredData["date"][i].(int64)).UTC()
+				// fmt.Println("Closing Time : ", timestamp.Format("2006-01-02 15:04:00"))
 				c.ClosingTime = filteredData["date"][i].(int64)
 				c.Close = filteredData["close"][i].(float64)
 			}
-			if c.OpeningTime > filteredData["date"][i].(int64) {
+			if oTime.Sub(timestamp) > 0 {
+				// timestamp = time.Unix(0, filteredData["date"][i].(int64)).UTC()
+				// fmt.Println("Opening Time : ", timestamp.Format("2006-01-02 15:04:00"))
 				c.OpeningTime = filteredData["date"][i].(int64)
 				c.Open = filteredData["open"][i].(float64)
 			}
 		}
+		// c := candles[roundedTime]
+		// oTime := time.Unix(0, c.OpeningTime).UTC()
+		// fmt.Println("Opening Time : ", oTime.Format("2006-01-02 15:04:00"))
+
 	}
 	return candles
 }
 
-func createCSV(candles map[time.Time]*Candle, filename string) {
+func createCSV(candles map[time.Time]*Candle, filename string) []time.Time {
 	file, err := os.Create("./5min_candles/" + filename)
 	handleError(err, "Error Opening file")
 	defer file.Close()
@@ -142,9 +155,37 @@ func createCSV(candles map[time.Time]*Candle, filename string) {
 
 	fmt.Println("Calculating Fibonacci pivot points for ", filename, ".csv")
 	calulateFibonacciPoints(candles, times)
+	return times
 
 }
+func returnCandle(candles map[time.Time]*Candle, times []time.Time, userInput string) {
+	for _, t := range times {
+		c := candles[t]
+		// fmt.Println("time", t)
+		layout := "2006-01-02 15:04:05"
 
+		parsedTime, err := time.Parse(layout, userInput)
+		handleError(err, "Error parsing time")
+		parsedTime = parsedTime.UTC()
+		duration := parsedTime.Sub(t)
+		// fmt.Println(parsedTime)
+		// fmt.Println(d)
+		// candletime := time.Unix(0, c.OpeningTime).UTC()
+		// fmt.Println("Candle Opening at ", candletime.Format("2024-01-10 15:00:00"))
+
+		if duration.Minutes() <= 5.0 && duration.Minutes() >= 0 {
+			candletime := time.Unix(0, c.OpeningTime).UTC()
+			fmt.Println("Candle Value at", candletime.Format("2006-01-02 15:04:00"))
+			fmt.Printf("Open : %.2f\n", c.Open)
+			fmt.Printf("High : %.2f\n", c.High)
+			fmt.Printf("Low : %.2f\n", c.Low)
+			fmt.Printf("Close : %.2f\n", c.Close)
+			fmt.Printf("Volume : %.2f\n", c.Volume)
+
+		}
+
+	}
+}
 func calulateFibonacciPoints(candles map[time.Time]*Candle, times []time.Time) {
 	var high, low, close float64
 	for _, t := range times {
@@ -181,17 +222,20 @@ func main() {
 		f := e.Name()
 		filename := f[:7]
 
-		fmt.Println("Reading data from", f)
+		// fmt.Println("Reading data from", f)
 		numRows, tradeData := initializeData(filename)
 
 		filteredData := filterData(numRows, tradeData)
-		fmt.Println("Filtering data on 2024-01-10 from", f)
+		// fmt.Println("Filtering data on 2024-01-10 from", f)
 
 		candles := create5MinuteWindow(filteredData)
-		fmt.Println("Creating 5 minute candles for", f)
+		// fmt.Println("Creating 5 minute candles for", f)
 
-		createCSV(candles, filename)
-		fmt.Println("All Process Completed For", f)
+		times := createCSV(candles, filename)
+		userInput := "2024-01-10 12:17:00"
+		returnCandle(candles, times, userInput)
+
+		// fmt.Println("All Process Completed For", f)
 		fmt.Println()
 	}
 }
